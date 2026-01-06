@@ -12,7 +12,8 @@ stm32/
     ├── Dockerfile
     ├── docker-compose.yml
     └── projects/
-        └── led-blink/    # サンプルプロジェクト
+        ├── led-blink/    # LED点滅サンプル
+        └── color-led/    # RGB LEDレインボー
 ```
 
 ## 動作確認済み環境
@@ -141,9 +142,22 @@ docker compose run --rm embassy-dev bash -c "cd led-blink && cargo run --release
 
 ### led-blink
 
-基本的なLED点滅サンプル。PC13のオンボードLEDを500ms間隔で点滅させる。
+基本的なLED点滅サンプル。PC13のオンボードLEDを1000ms間隔で点滅させる。
 
 Embassy非同期ランタイムを使用した最小構成のサンプル。
+
+### color-led
+
+RGB LEDレインボーエフェクト。TIM4ハードウェアPWMを使用。
+
+| 色 | GPIO | タイマー |
+|----|------|---------|
+| Red | PB6 | TIM4_CH1 |
+| Green | PB7 | TIM4_CH2 |
+| Blue | PB8 | TIM4_CH3 |
+
+HSV色空間を使用して360度の色相を50msごとに更新し、滑らかなレインボーエフェクトを実現。
+PC13のステータスLEDが1秒ごとにトグル。
 
 ## 新規プロジェクト作成
 
