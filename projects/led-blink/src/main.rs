@@ -9,7 +9,12 @@ use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let p = embassy_stm32::init(Default::default());
+    let mut config = embassy_stm32::Config::default();
+    // Keep SWD debug pins (PA13/PA14) enabled during sleep.
+    // Without this, probe-rs cannot reconnect after the first flash,
+    // resulting in "JtagNoDeviceConnected" errors.
+    config.enable_debug_during_sleep = true;
+    let p = embassy_stm32::init(config);
     info!("Embassy STM32F4 LED Blink started!");
 
     // PC13: onboard LED (active low)

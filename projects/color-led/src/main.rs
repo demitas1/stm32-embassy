@@ -53,7 +53,12 @@ fn hsv_to_rgb(hue: u16, sat: u8, val: u8) -> (u8, u8, u8) {
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let p = embassy_stm32::init(Default::default());
+    let mut config = embassy_stm32::Config::default();
+    // Keep SWD debug pins (PA13/PA14) enabled during sleep.
+    // Without this, probe-rs cannot reconnect after the first flash,
+    // resulting in "JtagNoDeviceConnected" errors.
+    config.enable_debug_during_sleep = true;
+    let p = embassy_stm32::init(config);
     info!("Embassy STM32F4 Color LED Rainbow started!");
 
     // PC13: onboard status LED (active low)

@@ -175,31 +175,16 @@ cp led-blink/rust-toolchain.toml my-project/
 
 ## トラブルシューティング
 
-### probe-rsが接続できない
+詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
 
-1. ST-Linkが正しく接続されているか確認
-2. udevルールが設定されているか確認
-3. コンテナがprivilegedモードで動作しているか確認
+### よくある問題
 
-### Permission denied エラー (cargo build時)
-
-Cargoキャッシュの権限問題。ボリュームを削除して再ビルド：
-
-```bash
-docker compose down -v
-docker compose build --no-cache
-```
-
-### ビルドエラー: linking with `flip-link` failed
-
-flip-linkがインストールされていない場合：
-```bash
-cargo install flip-link --locked
-```
-
-### defmtログが表示されない
-
-`.cargo/config.toml`で`DEFMT_LOG`環境変数が設定されているか確認。
+| 問題 | 対処 |
+|------|------|
+| JtagNoDeviceConnected | BOOT0+RESETでリカバリーモード起動 |
+| probe-rsがST-Linkを認識しない | USBを抜き差し、udevルール確認 |
+| Permission denied (cargo build) | `docker compose down -v` で再ビルド |
+| flip-link failed | `cargo install flip-link --locked` |
 
 ## Docker環境の詳細
 
