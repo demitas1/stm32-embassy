@@ -11,6 +11,7 @@ services:
       - ./projects:/projects
       - cargo-cache:/home/developer/.cargo/registry
       - cargo-git:/home/developer/.cargo/git
+      - rustup-toolchains:/home/developer/.rustup
       - /dev/bus/usb:/dev/bus/usb
     devices:
       - /dev/bus/usb:/dev/bus/usb
@@ -24,3 +25,4 @@ services:
 volumes:
   cargo-cache:
   cargo-git:
+  rustup-toolchains:

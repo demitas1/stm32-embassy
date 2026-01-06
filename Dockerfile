@@ -25,12 +25,14 @@ ARG GID=1000
 RUN groupadd -g ${GID} developer && \
     useradd -m -u ${UID} -g ${GID} -G dialout,plugdev developer
 
-# Copy cargo binaries and registry to developer's home
+# Copy cargo and rustup to developer's home
 RUN cp -r /usr/local/cargo /home/developer/.cargo && \
-    chown -R developer:developer /home/developer/.cargo
+    cp -r /usr/local/rustup /home/developer/.rustup && \
+    chown -R developer:developer /home/developer/.cargo /home/developer/.rustup
 
 USER developer
 ENV CARGO_HOME=/home/developer/.cargo
+ENV RUSTUP_HOME=/home/developer/.rustup
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
 WORKDIR /projects
