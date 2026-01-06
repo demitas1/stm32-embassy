@@ -1,0 +1,26 @@
+services:
+  embassy-dev:
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: stm32f4-embassy-dev
+    container_name: stm32-embassy-dev
+    volumes:
+      - ./projects:/projects
+      - cargo-cache:/home/developer/.cargo/registry
+      - cargo-git:/home/developer/.cargo/git
+      - /dev/bus/usb:/dev/bus/usb
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    tty: true
+    stdin_open: true
+    working_dir: /projects
+    environment:
+      - TERM=xterm-256color
+
+volumes:
+  cargo-cache:
+  cargo-git:
