@@ -173,6 +173,10 @@ cp led-blink/rust-toolchain.toml my-project/
 # Cargo.tomlの依存関係を編集
 ```
 
+## 補助ツール
+
+ソースコードのHTML変換（印刷用）などのユーティリティは [docs/tools.md](docs/tools.md) を参照。
+
 ## トラブルシューティング
 
 詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
