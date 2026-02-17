@@ -3,6 +3,7 @@
 ## 概要
 
 TB6612FNGモータードライバを使用して、2つのDCモーターをPWM制御するプロジェクト。
+将来的に移動ロボットの制御基盤として拡張することを想定した設計。
 
 ## ハードウェア構成
 
@@ -33,6 +34,9 @@ STM32F411                TB6612FNG
 │     GND ├──────────────┤ GND         │
 └─────────┘              └─────────────┘
 ```
+
+**STBY**: 今回はソフトウェア制御せず3V3に直結（常時有効）。
+将来的にスリープ制御が必要な場合はGPIOピンに変更可能。
 
 ## ピン配置
 
@@ -79,13 +83,30 @@ STM32F411                TB6612FNG
 ```
 src/
 ├── main.rs           # エントリポイント、デモ動作
-└── motor.rs          # モーター制御モジュール（オプション）
+└── motor.rs          # モーター制御モジュール
 ```
 
-### Motor構造体設計
+- **motor.rs**: `Motor`, `DualMotor` 構造体と制御ロジックを定義
+- **main.rs**: ペリフェラル初期化とデモシーケンスの実行
+
+### 設計方針
+
+embassy-stm32の`SimplePwm`は1つのタイマーインスタンスで複数チャンネルを一括管理する。
+そのため、以下のように責務を分離する：
+
+- **`Motor`**: 方向制御（GPIOピン2本）とチャンネル情報のみを保持
+- **`DualMotor`**: `SimplePwm`を所有し、2つの`Motor`と協調して速度＋方向を制御
+
+この構成により`SimplePwm`の所有権問題を回避しつつ、
+移動ロボット向けの高レベルAPI（`forward`, `turn_left`等）を自然に提供できる。
+
+### Motor構造体
 
 ```rust
-/// Motor direction
+use embassy_stm32::gpio::Output;
+use embassy_stm32::timer::Channel;
+
+/// Motor rotation direction
 pub enum Direction {
     Forward,
     Reverse,
@@ -93,22 +114,81 @@ pub enum Direction {
     Brake,
 }
 
-/// Motor controller for TB6612FNG
-pub struct Motor<'d, PWM, IN1, IN2> {
-    pwm: PWM,
-    in1: Output<'d, IN1>,
-    in2: Output<'d, IN2>,
+/// Single motor direction controller for TB6612FNG
+///
+/// Manages two GPIO pins (IN1/IN2) for direction control.
+/// Speed control (PWM) is handled by DualMotor which owns the SimplePwm.
+pub struct Motor<'d> {
+    in1: Output<'d>,
+    in2: Output<'d>,
+    channel: Channel,
 }
 
-impl<'d, PWM, IN1, IN2> Motor<'d, PWM, IN1, IN2> {
-    /// Set motor direction and speed
-    pub fn set(&mut self, direction: Direction, speed: u8);
+impl<'d> Motor<'d> {
+    pub fn new(in1: Output<'d>, in2: Output<'d>, channel: Channel) -> Self;
 
-    /// Stop motor (coast)
+    /// Set motor direction via IN1/IN2 GPIO pins
+    pub fn set_direction(&mut self, direction: Direction);
+
+    /// Get the PWM channel associated with this motor
+    pub fn channel(&self) -> Channel;
+}
+```
+
+### DualMotor構造体
+
+```rust
+use embassy_stm32::timer::simple_pwm::SimplePwm;
+use embassy_stm32::pac::TIM4;
+
+/// Dual motor controller for differential drive robot
+///
+/// Owns the SimplePwm instance and two Motors.
+/// Provides both individual motor control and high-level drive commands.
+pub struct DualMotor<'d> {
+    pwm: SimplePwm<'d, TIM4>,
+    motor_a: Motor<'d>,
+    motor_b: Motor<'d>,
+    max_duty: u32,
+}
+
+impl<'d> DualMotor<'d> {
+    pub fn new(
+        pwm: SimplePwm<'d, TIM4>,
+        motor_a: Motor<'d>,
+        motor_b: Motor<'d>,
+    ) -> Self;
+
+    // --- Individual motor control ---
+
+    /// Set a single motor's direction and speed (0-255)
+    pub fn set_motor(&mut self, id: MotorId, direction: Direction, speed: u8);
+
+    // --- High-level drive commands ---
+
+    /// Drive forward at given speed (both motors forward)
+    pub fn forward(&mut self, speed: u8);
+
+    /// Drive backward at given speed (both motors reverse)
+    pub fn backward(&mut self, speed: u8);
+
+    /// Pivot turn left (motor_a reverse, motor_b forward)
+    pub fn turn_left(&mut self, speed: u8);
+
+    /// Pivot turn right (motor_a forward, motor_b reverse)
+    pub fn turn_right(&mut self, speed: u8);
+
+    /// Stop both motors (coast)
     pub fn stop(&mut self);
 
-    /// Brake motor (short brake)
+    /// Brake both motors (short brake)
     pub fn brake(&mut self);
+}
+
+/// Motor identifier
+pub enum MotorId {
+    A,
+    B,
 }
 ```
 
@@ -121,31 +201,12 @@ impl<'d, PWM, IN1, IN2> Motor<'d, PWM, IN1, IN2> {
 | 分解能 | 8bit相当 | 0〜255で速度指定 |
 | カウントモード | Edge Aligned Up | 標準的なPWM |
 
-### API設計
+### 速度変換
+
+speed引数（0〜255）からPWMデューティへの変換：
 
 ```rust
-/// Create dual motor controller
-pub struct DualMotor<'d> {
-    motor_a: Motor<'d, ...>,
-    motor_b: Motor<'d, ...>,
-}
-
-impl DualMotor<'d> {
-    /// Move forward (both motors)
-    pub fn forward(&mut self, speed: u8);
-
-    /// Move backward (both motors)
-    pub fn backward(&mut self, speed: u8);
-
-    /// Turn left (differential drive)
-    pub fn turn_left(&mut self, speed: u8);
-
-    /// Turn right (differential drive)
-    pub fn turn_right(&mut self, speed: u8);
-
-    /// Stop both motors
-    pub fn stop(&mut self);
-}
+let duty = speed as u32 * self.max_duty / 255;
 ```
 
 ## デモ動作シーケンス
@@ -157,8 +218,10 @@ impl DualMotor<'d> {
 5. **停止**: 1秒間
 6. **左旋回**: 50%速度で1秒間
 7. **右旋回**: 50%速度で1秒間
-8. **ブレーキ**: 完全停止
+8. **ブレーキ**: 完全停止、1秒間
 9. **ループ**: 手順2に戻る
+
+各動作の前後でdefmtログを出力し、Status LEDをトグルする。
 
 ## 依存クレート
 
@@ -166,28 +229,68 @@ impl DualMotor<'d> {
 [dependencies]
 embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread"] }
 embassy-stm32 = { version = "0.2", features = ["stm32f411ce", "time-driver-any", "memory-x"] }
-embassy-time = { version = "0.4" }
+embassy-time = { version = "0.4", features = ["tick-hz-32_768"] }
 defmt = "0.3"
 defmt-rtt = "0.4"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
-embedded-hal = "1.0"
+embedded-hal = "0.2"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = "s"
 ```
+
+## embedded-hal バージョンについて
+
+本プロジェクトではcolor-ledプロジェクトと統一して **embedded-hal 0.2** を使用する。
+
+### embedded-hal 0.2 vs 1.0 の主な違い
+
+| 項目 | 0.2 | 1.0 |
+|------|-----|-----|
+| リリース時期 | 2018年〜 | 2024年1月 安定版リリース |
+| エラー型 | 各トレイトで `type Error` を個別定義 | `ErrorType` トレイトに統一 |
+| GPIO | `OutputPin`, `InputPin` 等 | `OutputPin`, `InputPin` （fallible only） |
+| PWM | `Pwm` トレイト（`get_max_duty`, `set_duty`, `enable` 等） | `SetDutyCycle` トレイト（`set_duty_cycle_fraction` 等） |
+| SPI/I2C | 別々のトレイト | 統一的なエラーハンドリング |
+| async対応 | なし | `embedded-hal-async` クレートで対応 |
+| no_std互換 | あり | あり |
+
+### 0.2を選択した理由
+
+1. **既存プロジェクトとの一貫性**: color-ledプロジェクトが0.2を使用中
+2. **embassy-stm32 0.2との組合せ実績**: 動作確認済みの組合せ
+3. **PWMトレイト**: `Pwm` トレイト経由で `get_max_duty()` / `set_duty()` を使用（color-ledと同じパターン）
+
+### 将来の移行
+
+embassy-stm32が1.0対応を安定化した段階で、全プロジェクトを一括移行する予定。
+移行時の主な変更点：
+- `Pwm` トレイト → `SetDutyCycle` トレイトへの置き換え
+- `get_max_duty()` / `set_duty()` → `max_duty_cycle()` / `set_duty_cycle()` へ変更
+- エラーハンドリングの統一
 
 ## ファイル構成
 
 ```
 stm32-embassy/projects/motor-control/
 ├── .cargo/
-│   └── config.toml       # ビルド設定
+│   └── config.toml       # ビルド設定（probe-rs, linker flags）
+├── .gitignore             # /target 除外
 ├── src/
-│   └── main.rs           # メインプログラム
-├── Cargo.toml            # 依存クレート定義
-├── build.rs              # ビルドスクリプト
-├── memory.x              # メモリレイアウト
-└── rust-toolchain.toml   # Rustツールチェイン
+│   ├── main.rs            # エントリポイント、デモ動作
+│   └── motor.rs           # モーター制御モジュール
+├── Cargo.toml             # 依存クレート定義
+└── rust-toolchain.toml    # Rustツールチェイン (1.92)
 ```
+
+※ `build.rs` / `memory.x` は不要。embassy-stm32の `memory-x` フィーチャーがメモリレイアウトを自動提供する。
 
 ## 電源に関する注意事項
 
@@ -202,6 +305,7 @@ stm32-embassy/projects/motor-control/
 - I2Cセンサー（IMU等）との連携
 - 複数モーター対応（TIM3等の追加タイマー使用）
 - UART/BLEによるリモート制御
+- `DualMotor` への曲線走行（左右速度差指定）メソッド追加
 
 ## 参考資料
 
