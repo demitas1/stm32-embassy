@@ -37,16 +37,27 @@ Embassyのデフォルト設定では、sleepモード中にSWDデバッグが�
 **症状**:
 - 初回の `cargo run --release` は成功する
 - 2回目以降で `JtagNoDeviceConnected` エラーが発生
-- `probe-rs download` + `probe-rs reset` では正常にフラッシュできる
 
-**対処法**: `enable_debug_during_sleep`を有効にする
+**対処法A（推奨）**: `.cargo/config.toml` の runner に `--connect-under-reset` を追加
+
+```toml
+[target.thumbv7em-none-eabihf]
+runner = "probe-rs run --chip STM32F411CEUx --connect-under-reset"
+```
+
+リセット状態を保ちながら接続するため、SWDが一時的に無効化された状態でも確実に回復できる。
+embassy-stm32 0.5 では `enable_debug_during_sleep` だけでは再発するケースが確認されているため、こちらを使う。
+
+> **注意**: `--connect-under-reset` を有効にするには、ST-Link の RST ピンと Black Pill の NRST ピンを接続する必要がある（下記「SWD配線」参照）。
+> NRSTが未接続の場合、このオプションは機能しない。その場合はBOOT0ボタン操作（対処法「ファームウェアがSWDピンを無効化している」参照）で代替する。
+
+**対処法B**: `enable_debug_during_sleep`を有効にする（embassy-stm32 0.2 では有効だった）
 
 ```rust
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let mut config = embassy_stm32::Config::default();
     // Keep SWD debug pins (PA13/PA14) enabled during sleep.
-    // Without this, probe-rs cannot reconnect after the first flash.
     config.enable_debug_during_sleep = true;
     let p = embassy_stm32::init(config);
     // ...
@@ -76,12 +87,13 @@ async fn main(_spawner: Spawner) {
 
 ST-Link V2とBlack Pill間の接続を確認：
 
-| ST-Link V2 | Black Pill |
-|-----------|------------|
-| SWDIO | SWDIO (PA13) |
-| SWCLK | SWCLK (PA14) |
-| GND | GND |
-| 3.3V | 3.3V (任意) |
+| ST-Link V2 | Black Pill | 備考 |
+|-----------|------------|------|
+| SWDIO | SWDIO (PA13) | 必須 |
+| SWCLK | SWCLK (PA14) | 必須 |
+| GND | GND | 必須 |
+| 3.3V | 3.3V | 任意（USB給電時は不要）|
+| RST | NRST | **追加推奨**（`--connect-under-reset` を有効にする）|
 
 確認ポイント：
 - ジャンパーワイヤーの断線
@@ -100,6 +112,35 @@ OpenOCDの出力で`Target voltage: 0.0V`と表示される場合は、ボード
 上記すべてを確認しても解決しない場合：
 - 別のST-Linkで試す
 - 別のBlack Pillボードで試す
+
+---
+
+#### embassy-stm32 0.5 + embassy-executor 0.9 での追加情報
+
+embassy-stm32 0.5 / embassy-executor 0.9 への移行後に `JtagNoDeviceConnected` が再発した場合の情報。
+
+**アイドル実装の変更（WFI → WFE）**
+
+embassy-executor 0.9 では、アイドル時の割り込み待ち実装が WFI（Wait For Interrupt）から **WFE（Wait For Event）** に変更された。
+WFEとDBGMCUの `DBG_SLEEP` ビットとの関係、および WFEがSWDデバッグに与える正確な影響については調査中。
+
+**`enable_debug_during_sleep` について**
+
+`enable_debug_during_sleep = true` は embassy-stm32 0.2 では有効だったが、0.5 では再発するケースが確認されている。
+0.5 での動作については調査中。
+
+**probe-rs のバージョン確認**
+
+```bash
+probe-rs --version
+```
+
+> **注意**: `probe-rs -v` や `probe-rs --verbose` はバージョン表示ではなく verbose フラグのため使用しない。
+
+**現時点の推奨ワークアラウンド**
+
+1. ST-Link の RST ピンと Black Pill の NRST ピンを接続する
+2. `.cargo/config.toml` で `--connect-under-reset` を使用する（対処法A参照）
 
 ---
 

@@ -24,10 +24,10 @@ TB6612FNGモータードライバを使用して、2つのDCモーターをPWM�
 ```
 STM32F411                TB6612FNG
 ┌─────────┐              ┌─────────────┐
-│     PB6 ├──────────────┤ PWMA        │
-│     PB7 ├──────────────┤ PWMB        │
-│     PB4 ├──────────────┤ AIN1        │
-│     PB5 ├──────────────┤ AIN2        │
+│     PB4 ├──────────────┤ PWMA        │
+│     PB5 ├──────────────┤ PWMB        │
+│     PB6 ├──────────────┤ AIN2        │
+│     PB7 ├──────────────┤ AIN1        │
 │     PB8 ├──────────────┤ BIN1        │
 │     PB9 ├──────────────┤ BIN2        │
 │     3V3 ├──────────────┤ STBY        │  ※常時有効化
@@ -42,10 +42,10 @@ STM32F411                TB6612FNG
 
 | ピン | 機能 | 用途 | 備考 |
 |------|------|------|------|
-| PB6 | TIM4_CH1 (AF2) | PWM-A | モーターA速度制御 |
-| PB7 | TIM4_CH2 (AF2) | PWM-B | モーターB速度制御 |
-| PB4 | GPIO出力 | AIN1 | モーターA方向制御1 |
-| PB5 | GPIO出力 | AIN2 | モーターA方向制御2 |
+| PB4 | TIM3_CH1 (AF2) | PWM-A | モーターA速度制御 |
+| PB5 | TIM3_CH2 (AF2) | PWM-B | モーターB速度制御 |
+| PB6 | GPIO出力 | AIN2 | モーターA方向制御2 |
+| PB7 | GPIO出力 | AIN1 | モーターA方向制御1 |
 | PB8 | GPIO出力 | BIN1 | モーターB方向制御1 |
 | PB9 | GPIO出力 | BIN2 | モーターB方向制御2 |
 | PC13 | GPIO出力 | Status LED | オンボードLED（動作確認用）|
@@ -53,7 +53,7 @@ STM32F411                TB6612FNG
 ### ピン選定理由
 
 1. **PB4〜PB9の連続配置**: 配線が容易でコネクタ接続に適している
-2. **TIM4の活用**: color-ledプロジェクトと同じタイマーで実績あり
+2. **TIM3の活用**: PB4/PB5はTIM3_CH1/CH2に対応（AF2）。汎用16bitタイマー
 3. **I2C1との分離**: 将来的にI2Cセンサー追加時はI2C2（PB10/PB3）を使用可能
 
 ## TB6612FNG制御ロジック
@@ -139,14 +139,14 @@ impl<'d> Motor<'d> {
 
 ```rust
 use embassy_stm32::timer::simple_pwm::SimplePwm;
-use embassy_stm32::pac::TIM4;
+use embassy_stm32::pac::TIM3;
 
 /// Dual motor controller for differential drive robot
 ///
 /// Owns the SimplePwm instance and two Motors.
 /// Provides both individual motor control and high-level drive commands.
 pub struct DualMotor<'d> {
-    pwm: SimplePwm<'d, TIM4>,
+    pwm: SimplePwm<'d, TIM3>,
     motor_a: Motor<'d>,
     motor_b: Motor<'d>,
     max_duty: u32,
@@ -154,7 +154,7 @@ pub struct DualMotor<'d> {
 
 impl<'d> DualMotor<'d> {
     pub fn new(
-        pwm: SimplePwm<'d, TIM4>,
+        pwm: SimplePwm<'d, TIM3>,
         motor_a: Motor<'d>,
         motor_b: Motor<'d>,
     ) -> Self;
@@ -196,7 +196,7 @@ pub enum MotorId {
 
 | パラメータ | 値 | 備考 |
 |-----------|-----|------|
-| タイマー | TIM4 | 汎用タイマー |
+| タイマー | TIM3 | 汎用16bitタイマー |
 | 周波数 | 20kHz | 可聴域外（静音動作）|
 | 分解能 | 8bit相当 | 0〜255で速度指定 |
 | カウントモード | Edge Aligned Up | 標準的なPWM |
@@ -227,15 +227,14 @@ let duty = speed as u32 * self.max_duty / 255;
 
 ```toml
 [dependencies]
-embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread"] }
-embassy-stm32 = { version = "0.2", features = ["stm32f411ce", "time-driver-any", "memory-x"] }
-embassy-time = { version = "0.4", features = ["tick-hz-32_768"] }
-defmt = "0.3"
-defmt-rtt = "0.4"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
+embassy-executor = { version = "0.9", features = ["arch-cortex-m", "executor-thread"] }
+embassy-stm32 = { version = "0.5", features = ["stm32f411ce", "time-driver-any", "memory-x"] }
+embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
+defmt = "1.0"
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
-embedded-hal = "0.2"
 
 [profile.dev]
 opt-level = 1
@@ -246,9 +245,9 @@ lto = true
 opt-level = "s"
 ```
 
-## embedded-hal バージョンについて
+`embedded-hal` は不要。embassy-stm32 0.5 では PWM 制御が `SimplePwmChannel` の直接メソッドに移行し、外部トレイトクレートへの依存がなくなった。
 
-本プロジェクトではcolor-ledプロジェクトと統一して **embedded-hal 0.2** を使用する。
+## embedded-hal バージョンと SimplePwm API の変遷
 
 ### embedded-hal 0.2 vs 1.0 の主な違い
 
@@ -262,19 +261,15 @@ opt-level = "s"
 | async対応 | なし | `embedded-hal-async` クレートで対応 |
 | no_std互換 | あり | あり |
 
-### 0.2を選択した理由
+### embassy-stm32 の SimplePwm API 変遷
 
-1. **既存プロジェクトとの一貫性**: color-ledプロジェクトが0.2を使用中
-2. **embassy-stm32 0.2との組合せ実績**: 動作確認済みの組合せ
-3. **PWMトレイト**: `Pwm` トレイト経由で `get_max_duty()` / `set_duty()` を使用（color-ledと同じパターン）
+| バージョン | PwmPin 生成 | チャンネル制御 | 最大デューティ取得 |
+|-----------|------------|--------------|-----------------|
+| 0.2 | `PwmPin::new_ch1(pin, type)` | `pwm.set_duty(Channel::Ch1, duty)` | `pwm.get_max_duty()` |
+| 0.5 | `PwmPin::new(pin, type)` | `pwm.split().ch1.set_duty_cycle(duty)` | `pwm.split().ch1.max_duty_cycle()` |
 
-### 将来の移行
-
-embassy-stm32が1.0対応を安定化した段階で、全プロジェクトを一括移行する予定。
-移行時の主な変更点：
-- `Pwm` トレイト → `SetDutyCycle` トレイトへの置き換え
-- `get_max_duty()` / `set_duty()` → `max_duty_cycle()` / `set_duty_cycle()` へ変更
-- エラーハンドリングの統一
+0.5 では `SimplePwm` を `split()` して得た `SimplePwmChannel` が制御の主体となる。
+`embedded-hal` クレートへの依存は不要になり、`Channel` enum も使わなくなった。
 
 ## ファイル構成
 
@@ -303,7 +298,7 @@ stm32-embassy/projects/motor-control/
 
 - エンコーダ入力によるフィードバック制御
 - I2Cセンサー（IMU等）との連携
-- 複数モーター対応（TIM3等の追加タイマー使用）
+- 複数モーター対応（TIM4等の追加タイマー使用）
 - UART/BLEによるリモート制御
 - `DualMotor` への曲線走行（左右速度差指定）メソッド追加
 

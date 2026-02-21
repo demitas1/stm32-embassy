@@ -114,7 +114,7 @@ Hue=359 → 赤（ループ）
 
 2. **メインループ（50ms周期）**
    - HSV→RGB変換（sat=255, val=255固定）
-   - PWMデューティ比設定（0-255を0-max_dutyにスケーリング）
+   - PWMデューティ比設定（0-255を0-max_dutyにスケーリング、`SimplePwmChannel::set_duty_cycle()`）
    - Hue値インクリメント（0〜359でループ）
    - 20回ごとにStatus LED点滅 + ログ出力
 
@@ -130,20 +130,21 @@ Hue=359 → 赤（ループ）
 
 ```toml
 [dependencies]
-embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread"] }
-embassy-stm32 = { version = "0.2", features = [
+embassy-executor = { version = "0.9", features = ["arch-cortex-m", "executor-thread"] }
+embassy-stm32 = { version = "0.5", features = [
     "stm32f411ce",
     "time-driver-any",
     "memory-x",
 ]}
-embassy-time = { version = "0.4", features = ["tick-hz-32_768"] }
-embedded-hal = "0.2"
-defmt = "0.3"
-defmt-rtt = "0.4"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
+embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
+defmt = "1.0"
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
 ```
+
+`embedded-hal` は embassy-stm32 0.5 で SimplePwm API が直接メソッドに移行したため不要。
 
 ## ファイル構成
 

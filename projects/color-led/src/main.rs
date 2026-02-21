@@ -15,9 +15,7 @@ use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::timer::low_level::CountingMode;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
-use embassy_stm32::timer::Channel;
 use embassy_time::Timer;
-use embedded_hal::Pwm;
 use {defmt_rtt as _, panic_probe as _};
 
 /// Convert HSV to RGB
@@ -68,11 +66,11 @@ async fn main(_spawner: Spawner) {
     // PB6 = TIM4_CH1 (Red)
     // PB7 = TIM4_CH2 (Green)
     // PB8 = TIM4_CH3 (Blue)
-    let ch1_pin = PwmPin::new_ch1(p.PB6, embassy_stm32::gpio::OutputType::PushPull);
-    let ch2_pin = PwmPin::new_ch2(p.PB7, embassy_stm32::gpio::OutputType::PushPull);
-    let ch3_pin = PwmPin::new_ch3(p.PB8, embassy_stm32::gpio::OutputType::PushPull);
+    let ch1_pin = PwmPin::new(p.PB6, embassy_stm32::gpio::OutputType::PushPull);
+    let ch2_pin = PwmPin::new(p.PB7, embassy_stm32::gpio::OutputType::PushPull);
+    let ch3_pin = PwmPin::new(p.PB8, embassy_stm32::gpio::OutputType::PushPull);
 
-    let mut pwm = SimplePwm::new(
+    let pwm = SimplePwm::new(
         p.TIM4,
         Some(ch1_pin),
         Some(ch2_pin),
@@ -82,13 +80,15 @@ async fn main(_spawner: Spawner) {
         CountingMode::EdgeAlignedUp,
     );
 
-    let max_duty = pwm.get_max_duty();
+    // Split PWM into individual channels
+    let mut channels = pwm.split();
+    let max_duty = channels.ch1.max_duty_cycle();
     info!("PWM max duty cycle: {}", max_duty);
 
     // Enable PWM channels
-    pwm.enable(Channel::Ch1);
-    pwm.enable(Channel::Ch2);
-    pwm.enable(Channel::Ch3);
+    channels.ch1.enable();
+    channels.ch2.enable();
+    channels.ch3.enable();
 
     let mut hue: u16 = 0;
     let mut toggle_counter: u8 = 0;
@@ -102,9 +102,9 @@ async fn main(_spawner: Spawner) {
         let duty_g = g as u32 * max_duty / 255;
         let duty_b = b as u32 * max_duty / 255;
 
-        pwm.set_duty(Channel::Ch1, duty_r);
-        pwm.set_duty(Channel::Ch2, duty_g);
-        pwm.set_duty(Channel::Ch3, duty_b);
+        channels.ch1.set_duty_cycle(duty_r);
+        channels.ch2.set_duty_cycle(duty_g);
+        channels.ch3.set_duty_cycle(duty_b);
 
         // Increment hue for rainbow effect
         hue = (hue + 1) % 360;
