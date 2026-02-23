@@ -170,22 +170,28 @@ AHBバスマトリクスにアクティブマスターとして認識される�
 
 | 方法 | コスト | 効果 |
 |------|--------|------|
-| BOOT0ボタン操作（毎回） | ゼロ | 確実（現状の唯一の手段）|
+| BOOT0ボタン操作（毎回） | ゼロ | 確実（ST-Link V2 使用時の対策）|
 | DMA1 クロック有効化 | ゼロ | **効果なし**（STM32F411 で確認済み）|
-| J-Link EDU Mini 等に乗り換え | 約3000円 | 恒久解決 |
-| DAPLink (CMSIS-DAP) 対応プローブ | 安価 | 恒久解決 |
+| picoprobe (CMSIS-DAP) に乗り換え | Pico本体のみ | **恒久解決（確認済み）** NRST 不要 |
+| J-Link EDU Mini 等に乗り換え | 約3000円 | 恒久解決（未検証）|
 
-**TODO: picoprobe を CMSIS-DAP プローブとして使用する**
+**解決策：picoprobe (CMSIS-DAP) への切り替え（確認済み）**
 
-Raspberry Pi Pico に [picoprobe](https://github.com/raspberrypi/picoprobe) ファームウェアを書き込むことで
-CMSIS-DAP 対応プローブとして利用できる。
+Raspberry Pi Pico に [picoprobe](https://github.com/raspberrypi/picoprobe) ファームウェアを書き込み
+CMSIS-DAP 対応プローブとして使用することで、BOOT0 操作なしで `cargo run --release` が動作することを確認済み。
+
+確認済みの構成：
+- プローブ: Raspberry Pi Debugprobe on Pico (USB `2e8a:000c`)
+- NRST 接続: **不要**（4線 SWD のみで動作）
+- `--connect-under-reset` オプション: **不要**
+- `.cargo/config.toml` の runner: `probe-rs run --chip STM32F411CEUx --probe 2e8a:000c`
 
 **ST-Link V2 で解決できない根本理由**
 
 ST-Link V2 は HLA（High Level Adapter）トランスポートを使用する。
 probe-rs は高レベルコマンドを ST-Link に送るだけで、SWD の細かいタイミング制御は
-ST-Link 内部ファームウェアが担う。このため、NRST を保持したまま SWD を確立する
-「真の connect-under-reset」が実現できない。
+ST-Link 内部ファームウェアが担う。このため、WFE スリープ中の SWD AP アクセスが
+ブロックされても probe-rs 側で対処できない。
 
 probe-rs のログにもこの制限が明記されている：
 ```
@@ -196,24 +202,11 @@ Falling back to standard probe reset.
 OpenOCD でも同様に `connect_deassert_srst`（接続前に NRST を解放）が強制される。
 これは ST-Link V2 の設計上の制限であり、ファームウェアアップデートでも解消されない。
 
-**DAPLink / CMSIS-DAP で解決できる理由**
+**CMSIS-DAP で解決できた理由**
 
 CMSIS-DAP では probe-rs が SWD のビットレベル操作を直接制御できる。
-これにより以下の順序が実現可能：
-
-```
-1. NRST をアサート（チップをリセット保持）
-2. NRST を Low のまま SWD DP に接続
-3. AP 0 を確立（チップはリセット中なので WFE に入れない）
-4. NRST を解放（デバッガ接続済みの状態でチップが起動）
-```
-
-チップが WFE スリープに入る前にデバッガ接続が完了するため、
-`JtagNoDeviceConnected` は発生しない。
-
-- ファームウェア: https://github.com/raspberrypi/picoprobe
-- probe-rs での CMSIS-DAP サポート: 対応済み
-- 検証項目: WFE スリープ中の `JtagNoDeviceConnected` が解消されるか確認する
+WFE スリープ中でも SWD ライン・リセットシーケンスで DP を再初期化し、
+AHB-AP への接続を確立できる。NRST によるチップリセットは不要。
 
 **probe-rs のバージョン確認**
 

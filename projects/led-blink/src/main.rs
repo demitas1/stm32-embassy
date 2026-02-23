@@ -9,11 +9,10 @@ use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let mut config = embassy_stm32::Config::default();
-    // Keep SWD debug pins (PA13/PA14) enabled during sleep.
-    // Without this, probe-rs cannot reconnect after the first flash,
-    // resulting in "JtagNoDeviceConnected" errors.
-    config.enable_debug_during_sleep = true;
+    let config = embassy_stm32::Config::default();
+    // NOTE: enable_debug_during_sleep has no effect on STM32F411 + ST-Link V2 clone.
+    // WFE sleep disables the AHB bus matrix, cutting SWD access regardless of DBGMCU_CR.
+    // Use picoprobe (CMSIS-DAP) as the debug probe instead.
     let p = embassy_stm32::init(config);
     info!("Embassy STM32F4 LED Blink started!");
 

@@ -51,13 +51,7 @@ fn hsv_to_rgb(hue: u16, sat: u8, val: u8) -> (u8, u8, u8) {
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let mut config = embassy_stm32::Config::default();
-    // NOTE: enable_debug_during_sleep sets DBGMCU_CR=0x7 (DBG_SLEEP|DBG_STOP|DBG_STANDBY),
-    // but this does NOT resolve JtagNoDeviceConnected with ST-Link V2 clones.
-    // Root cause: WFE sleep deactivates the AHB bus matrix, making SWD AHB-AP inaccessible
-    // regardless of DBGMCU settings. Use BOOT0 recovery procedure instead.
-    // May be effective with CMSIS-DAP probes (e.g. picoprobe) that support true connect-under-reset.
-    // config.enable_debug_during_sleep = true;
+    let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
     info!("Embassy STM32F4 Color LED Rainbow started!");
 

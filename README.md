@@ -24,9 +24,9 @@ stm32/
 
 ## ホスト側の設定
 
-### udevルール (ST-Link/probe-rs用)
+### udevルール (probe-rs用)
 
-ST-Linkをroot権限なしで使用するため、udevルールを設定する。
+各プローブをroot権限なしで使用するため、udevルールを設定する。
 
 ```bash
 sudo tee /etc/udev/rules.d/99-stlink.rules << 'EOF'
@@ -37,6 +37,9 @@ ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", MODE="0666", GROUP="plugdev"
 # ST-Link V3
 ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374e", MODE="0666", GROUP="plugdev"
 ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374f", MODE="0666", GROUP="plugdev"
+
+# Raspberry Pi Debugprobe / picoprobe (CMSIS-DAP)
+ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", MODE="0666", GROUP="plugdev"
 EOF
 
 sudo udevadm control --reload-rules
@@ -90,36 +93,33 @@ cargo build --release
 cargo clean && cargo build --release
 ```
 
-### フラッシュ（ST-Link V2 での運用方法）
+### フラッシュ
 
-ST-Link V2クローンは embassy-executor 0.9 の WFE スリープ中に SWD 接続が切断される問題がある。
-2回目以降の `cargo run --release` は必ず以下の手順で実行すること。
+```bash
+# コンテナ内で実行（BOOT0 操作不要）
+cargo run --release
+```
 
-**毎回の手順：BOOT0 でリカバリーモードに入ってからフラッシュ**
+#### 使用プローブ
+
+| プローブ | runner 設定 | BOOT0 操作 |
+|---------|------------|-----------|
+| picoprobe (CMSIS-DAP) | `probe-rs run --chip STM32F411CEUx --probe 2e8a:000c` | **不要** |
+| ST-Link V2クローン | `probe-rs run --chip STM32F411CEUx` | **毎回必要** |
+
+#### ST-Link V2 を使う場合（BOOT0 操作が毎回必要）
+
+embassy-executor 0.9 の WFE スリープ中に SWD 接続が切断されるため、
+2回目以降の `cargo run --release` は以下の手順が必要：
 
 ```
 1. Black Pill の BOOT0 ボタンを押しながら
 2. RESET ボタンを押して離す
-3. BOOT0 ボタンを離す   ← この状態でシステムメモリブートローダが起動
+3. BOOT0 ボタンを離す
 4. cargo run --release を実行
 ```
 
-```bash
-# コンテナ内で実行
-cargo run --release
-```
-
-BOOT0 操作を忘れると以下のエラーが発生する：
-```
-WARN probe_rs::probe::stlink: send_jtag_command 242 failed: JtagNoDeviceConnected
-Error: Connecting to the chip was unsuccessful.
-```
-
-この場合は慌てず BOOT0 操作をやり直す。ハードウェア故障ではない。
-
-> **補足**: この問題は ST-Link V2 クローンの制限によるもの。
-> CMSIS-DAP 対応プローブ（picoprobe 等）では BOOT0 操作不要になる見込み。
-> 詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
+詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
 
 ### ワンライナー
 

@@ -1,5 +1,8 @@
 [target.thumbv7em-none-eabihf]
-runner = "probe-rs run --chip STM32F411CEUx --connect-under-reset"
+# picoprobe (CMSIS-DAP) - BOOT0操作不要
+runner = "probe-rs run --chip STM32F411CEUx --probe 2e8a:000c"
+# ST-Link V2 - 毎回BOOT0+RESET操作が必要
+# runner = "probe-rs run --chip STM32F411CEUx --connect-under-reset"
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 rustflags = [
