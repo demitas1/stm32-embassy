@@ -203,6 +203,8 @@ cp led-blink/rust-toolchain.toml my-project/
 
 詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
 
+picoprobe の配線については [docs/picoprobe.md](docs/picoprobe.md) を参照。
+
 ### よくある問題
 
 | 問題 | 対処 |
