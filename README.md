@@ -90,14 +90,36 @@ cargo build --release
 cargo clean && cargo build --release
 ```
 
-### フラッシュ
+### フラッシュ（ST-Link V2 での運用方法）
 
-ST-Linkを接続した状態で:
+ST-Link V2クローンは embassy-executor 0.9 の WFE スリープ中に SWD 接続が切断される問題がある。
+2回目以降の `cargo run --release` は必ず以下の手順で実行すること。
+
+**毎回の手順：BOOT0 でリカバリーモードに入ってからフラッシュ**
+
+```
+1. Black Pill の BOOT0 ボタンを押しながら
+2. RESET ボタンを押して離す
+3. BOOT0 ボタンを離す   ← この状態でシステムメモリブートローダが起動
+4. cargo run --release を実行
+```
 
 ```bash
-# probe-rsを使用（ビルド＆フラッシュ＆実行）
+# コンテナ内で実行
 cargo run --release
 ```
+
+BOOT0 操作を忘れると以下のエラーが発生する：
+```
+WARN probe_rs::probe::stlink: send_jtag_command 242 failed: JtagNoDeviceConnected
+Error: Connecting to the chip was unsuccessful.
+```
+
+この場合は慌てず BOOT0 操作をやり直す。ハードウェア故障ではない。
+
+> **補足**: この問題は ST-Link V2 クローンの制限によるもの。
+> CMSIS-DAP 対応プローブ（picoprobe 等）では BOOT0 操作不要になる見込み。
+> 詳細は [docs/troubleshooting.md](docs/troubleshooting.md) を参照。
 
 ### ワンライナー
 
