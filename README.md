@@ -81,7 +81,7 @@ UID=$(id -u) GID=$(id -g) docker compose build
 
 ```bash
 # コンテナに入る
-docker compose run --rm embassy-dev
+docker compose run --rm embassy-dev  # または ./start.sh
 
 # プロジェクトディレクトリへ移動
 cd led-blink
@@ -149,16 +149,16 @@ docker compose run --rm embassy-dev bash -c "cd led-blink && cargo run --release
 
 | クレート | バージョン | 用途 |
 |---------|-----------|------|
-| embassy-executor | 0.7 | 非同期タスクエグゼキュータ |
-| embassy-time | 0.4 | 時間管理、Timer |
-| embassy-stm32 | 0.2 | STM32 HAL |
-| defmt | 0.3 | 組み込み向けログ |
+| embassy-executor | 0.9 | 非同期タスクエグゼキュータ |
+| embassy-time | 0.5 | 時間管理、Timer |
+| embassy-stm32 | 0.5 | STM32 HAL |
+| defmt | 1.0 | 組み込み向けログ |
 | probe-rs-tools | 0.30 | デバッガ/フラッシュツール |
 
 ### プロファイル設定
 
 - **dev**: opt-level = 1 (デバッグ用、最小限の最適化)
-- **release**: LTO有効、サイズ最適化、デバッグ情報保持
+- **release**: LTO有効、サイズ最適化、デバッグ情報保持、codegen-units = 1
 
 ## プロジェクト
 
@@ -210,9 +210,9 @@ picoprobe の配線については [docs/picoprobe.md](docs/picoprobe.md) を参
 | 問題 | 対処 |
 |------|------|
 | JtagNoDeviceConnected | BOOT0+RESETでリカバリーモード起動 |
-| probe-rsがST-Linkを認識しない | USBを抜き差し、udevルール確認 |
+| probe-rsがプローブを認識しない | picoprobeのUSBを抜き差し、udevルール確認 |
+| Could not determine a suitable packet size | `docker-compose.yml` の `volumes` に `/dev/bus/usb:/dev/bus/usb` があるか確認 |
 | Permission denied (cargo build) | `docker compose down -v` で再ビルド |
-| flip-link failed | `cargo install flip-link --locked` |
 
 ## Docker環境の詳細
 

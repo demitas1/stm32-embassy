@@ -93,10 +93,11 @@ async fn main(_spawner: Spawner) {
         // Convert HSV to RGB (full saturation and brightness)
         let (r, g, b) = hsv_to_rgb(hue, 255, 255);
 
-        // Set PWM duty cycles (scale 0-255 to 0-max_duty)
-        let duty_r = r as u32 * max_duty / 255;
-        let duty_g = g as u32 * max_duty / 255;
-        let duty_b = b as u32 * max_duty / 255;
+        // Scale 0-255 to 0-max_duty. Compute in u32 to avoid overflow in the
+        // intermediate product (255 * 65535 = 16_711_425 > u16::MAX)
+        let duty_r = r as u32 * max_duty as u32 / 255;
+        let duty_g = g as u32 * max_duty as u32 / 255;
+        let duty_b = b as u32 * max_duty as u32 / 255;
 
         channels.ch1.set_duty_cycle(duty_r);
         channels.ch2.set_duty_cycle(duty_g);
