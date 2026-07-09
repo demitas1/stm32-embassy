@@ -18,7 +18,42 @@ use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
-/// Convert HSV to RGB
+/// Convert HSV to RGB using floating-point arithmetic (reference implementation).
+///
+/// Functionally equivalent to [`hsv_to_rgb`]. Uses f32 for readability.
+/// STM32F411 has a hardware FPU (Cortex-M4F), so f32 ops are single-cycle.
+///
+/// # Arguments
+/// * `hue` - Hue value (0-359)
+/// * `sat` - Saturation (0-255)
+/// * `val` - Value/Brightness (0-255)
+///
+/// # Returns
+/// (r, g, b) tuple with values 0-255
+#[allow(dead_code)]
+fn hsv_to_rgb_f32(hue: u16, sat: u8, val: u8) -> (u8, u8, u8) {
+    let s = sat as f32 / 255.0;
+    let v = val as f32 / 255.0;
+
+    let region = (hue / 60) as u8;
+    let f = (hue % 60) as f32 / 60.0;
+
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - f * s);
+    let t = v * (1.0 - (1.0 - f) * s);
+
+    let (r, g, b) = match region {
+        0 => (v, t, p),
+        1 => (q, v, p),
+        2 => (p, v, t),
+        3 => (p, q, v),
+        4 => (t, p, v),
+        _ => (v, p, q),
+    };
+    ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+}
+
+/// Convert HSV to RGB using integer arithmetic.
 ///
 /// # Arguments
 /// * `hue` - Hue value (0-359)

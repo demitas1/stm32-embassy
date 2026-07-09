@@ -104,60 +104,54 @@ embassy-stm32の`SimplePwm`は1つのタイマーインスタンスで複数チ�
 
 ```rust
 use embassy_stm32::gpio::Output;
-use embassy_stm32::timer::Channel;
 
 /// Motor rotation direction
 pub enum Direction {
     Forward,
     Reverse,
-    Stop,
-    Brake,
+    Stop,  // coast: both pins low
+    Brake, // short brake: both pins high
 }
 
 /// Single motor direction controller for TB6612FNG
 ///
-/// Manages two GPIO pins (IN1/IN2) for direction control.
-/// Speed control (PWM) is handled by DualMotor which owns the SimplePwm.
-pub struct Motor<'d> {
-    in1: Output<'d>,
-    in2: Output<'d>,
-    channel: Channel,
+/// Manages IN1/IN2 GPIO pins for direction control.
+/// Speed control (PWM duty) is delegated to DualMotor.
+pub struct Motor {
+    in1: Output<'static>,
+    in2: Output<'static>,
 }
 
-impl<'d> Motor<'d> {
-    pub fn new(in1: Output<'d>, in2: Output<'d>, channel: Channel) -> Self;
-
-    /// Set motor direction via IN1/IN2 GPIO pins
-    pub fn set_direction(&mut self, direction: Direction);
-
-    /// Get the PWM channel associated with this motor
-    pub fn channel(&self) -> Channel;
+impl Motor {
+    pub fn new(in1: Output<'static>, in2: Output<'static>) -> Self;
+    pub fn set_direction(&mut self, dir: Direction);
 }
 ```
 
 ### DualMotor構造体
 
+`SimplePwm::split()` が `SimplePwmChannels<'static, T>` を返してオーナーシップを消費するため、
+`DualMotor` は `SimplePwm` ではなく **split後のチャンネルを直接フィールドに持つ**。
+
 ```rust
-use embassy_stm32::timer::simple_pwm::SimplePwm;
-use embassy_stm32::pac::TIM3;
+use embassy_stm32::peripherals::TIM3;
+use embassy_stm32::timer::simple_pwm::{SimplePwm, SimplePwmChannel};
 
 /// Dual motor controller for differential drive robot
 ///
-/// Owns the SimplePwm instance and two Motors.
-/// Provides both individual motor control and high-level drive commands.
-pub struct DualMotor<'d> {
-    pwm: SimplePwm<'d, TIM3>,
-    motor_a: Motor<'d>,
-    motor_b: Motor<'d>,
+/// Owns TIM3 CH1/CH2 channels (after split) and two Motor instances.
+/// Provides both per-motor control and high-level drive commands.
+pub struct DualMotor {
+    pwm_a: SimplePwmChannel<'static, TIM3>, // CH1 = PB4
+    pwm_b: SimplePwmChannel<'static, TIM3>, // CH2 = PB5
+    motor_a: Motor,
+    motor_b: Motor,
     max_duty: u32,
 }
 
-impl<'d> DualMotor<'d> {
-    pub fn new(
-        pwm: SimplePwm<'d, TIM3>,
-        motor_a: Motor<'d>,
-        motor_b: Motor<'d>,
-    ) -> Self;
+impl DualMotor {
+    /// Takes ownership of SimplePwm and calls split() internally
+    pub fn new(pwm: SimplePwm<'static, TIM3>, motor_a: Motor, motor_b: Motor) -> Self;
 
     // --- Individual motor control ---
 
@@ -166,26 +160,16 @@ impl<'d> DualMotor<'d> {
 
     // --- High-level drive commands ---
 
-    /// Drive forward at given speed (both motors forward)
     pub fn forward(&mut self, speed: u8);
-
-    /// Drive backward at given speed (both motors reverse)
     pub fn backward(&mut self, speed: u8);
-
-    /// Pivot turn left (motor_a reverse, motor_b forward)
-    pub fn turn_left(&mut self, speed: u8);
-
-    /// Pivot turn right (motor_a forward, motor_b reverse)
-    pub fn turn_right(&mut self, speed: u8);
-
-    /// Stop both motors (coast)
-    pub fn stop(&mut self);
-
-    /// Brake both motors (short brake)
-    pub fn brake(&mut self);
+    pub fn turn_left(&mut self, speed: u8);  // motor_a reverse, motor_b forward
+    pub fn turn_right(&mut self, speed: u8); // motor_a forward, motor_b reverse
+    pub fn stop(&mut self);                  // coast
+    pub fn brake(&mut self);                 // short brake
 }
 
 /// Motor identifier
+#[allow(dead_code)]
 pub enum MotorId {
     A,
     B,
@@ -243,6 +227,7 @@ opt-level = 1
 debug = 2
 lto = true
 opt-level = "s"
+codegen-units = 1
 ```
 
 `embedded-hal` は不要。embassy-stm32 0.5 では PWM 制御が `SimplePwmChannel` の直接メソッドに移行し、外部トレイトクレートへの依存がなくなった。
